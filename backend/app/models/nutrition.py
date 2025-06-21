@@ -1,40 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException
-from typing import List
+from pydantic import BaseModel, Field
 from datetime import datetime
+from typing import Optional
 
-from app.deps import get_db
-from app.models.nutrition import NutritionCreate, NutritionInDB
+class NutritionBase(BaseModel):
+    name: str
+    calories: int = Field(gt=0)
+    notes: Optional[str]
 
-router = APIRouter(tags=["nutrition"])
+class NutritionCreate(NutritionBase):
+    pass
 
-@router.post("/nutrition", response_model=NutritionInDB)
-async def log_meal(
-    payload: NutritionCreate,
-    db = Depends(get_db),
-):
-    doc = payload.dict()
-    doc["timestamp"] = datetime.utcnow()
-    result = await db.nutrition.insert_one(doc)
-    if not result.inserted_id:
-        raise HTTPException(500, "Insert failed")
-    return NutritionInDB(
-        id=str(result.inserted_id),
-        **payload.dict(),
-        timestamp=doc["timestamp"],
-    )
+class NutritionInDB(NutritionBase):
+    id: str
+    timestamp: datetime
 
-@router.get("/nutrition", response_model=List[NutritionInDB])
-async def list_meals(
-    db = Depends(get_db),
-):
-    cursor = db.nutrition.find().sort("timestamp", -1)
-    meals = []
-    async for doc in cursor:
-        meals.append(NutritionInDB(
-            id=str(doc["_id"]),
-            name=doc["name"],
-            calories=doc["calories"],
-            notes=doc.get("notes"),
-            timestamp=doc["timestamp"],
-        ))
-    return meals
+    class Config:
+        orm_mode = True
